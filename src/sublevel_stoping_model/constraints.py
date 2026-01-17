@@ -1,0 +1,1 @@
+#La idea es que aqui esten todos las restricciones#
