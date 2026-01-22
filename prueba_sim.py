@@ -12,35 +12,40 @@ sub_c = 3   #subcaserones +1
 #Parametros manuales en este caso para un caseron de 3 sub
 
 #======= CONJUNTOS ==========
-
+#actividades
+Act = range(cas*4*sub_c)
 #caserones
 C = range(cas) 
 #subcaserones
-S = {c: range(sub_c) for c in C}
+S = {c: range(sub_c*c,sub_c*(c+1)) for c in C}
 #ultimo de los subcaserones
-US = {c: range(sub_c -1, sub_c) for c in C}
+US = {c: (3*(c+1) - 1) for c in C}
 #chimeneas del caseron c
 CH = {c: range(sub_c) for c in C}
 #presedencias
 P_c = {
-    1: None,
-    2: 1, 
-    3: 2
+    0: None,
+    1: 0, 
+    2: 1
 }
 #galerias, tipo 1 y tipo dos
-G_1 = {c: range(sub_c) for c in C}
-G_2 = {c: range(sub_c) for c in C}
+G_1 = {c : range(sub_c*(c+1),sub_c*(c+2)) for c in C}
+G_2 = {c : range(sub_c*(c+2),sub_c*(c+3)) for c in C}
 #Bateas
-B = {c: range(sub_c) for c in C}
+B = {c : range(sub_c*(c+2),sub_c*(c+3)) for c in C}
 #Bateas del subcaseron c
 SB_c = range(sub_c)
 #tipo de drill
-Dr = range(3)
+Dr = range(4)
 #Conjunto de maquinarias
 I_h = range(1) #perforadoras verticales
 I_u = range(1,2) #perforadoras radiales
 I_d = range(2,3)
 I_c = range(3,4)
+I_h_v = 1
+I_u_v = 1
+I_d_v = 1
+I_c_v = 1
 I_val = 4
 J_val = 1
 K_val = 1
@@ -48,8 +53,9 @@ I = range(I_val)
 J = range(J_val) 
 K = range(K_val)
 #Periodos
-T = range(15)
-
+time_l = 15
+T = range(time_l)
+range(1,time_l)
 #======= PARAMETROS ======
 for k in C:
     Mass_drill = {
@@ -78,20 +84,19 @@ T_t = {
 
 
 #======= Variables ======
-for k in C:
-    #------------------------
-    # #(x esta en orden sub-caseron, tiempo, tipo de drill)
-    x = m.addVars(S[k], T, Dr,vtype=GRB.BINARY,name="x")
-    y = m.addVars(S[k], T,vtype=GRB.BINARY,name="y")
-    z = m.addVars(S[k], T,vtype=GRB.BINARY,name="z")
-    #------------------------
-    x_bar = m.addVars(S[k], T, Dr,vtype=GRB.BINARY,name="x_bar")
-    y_bar = m.addVars(S[k], T,vtype=GRB.BINARY,name="y_bar")
-    z_bar = m.addVars(S[k], T,vtype=GRB.BINARY,name="z_bar")
-    #------------------------
-    x_hat = m.addVars(I, S[k], T, Dr,vtype=GRB.CONTINUOUS,lb=0,ub=1,name="x_hat")
-    y_hat = m.addVars(J, S[k], T,vtype=GRB.CONTINUOUS,lb=0,ub=1,name="y_hat")
-    z_hat = m.addVars(K, S[k], T,vtype=GRB.CONTINUOUS,lb=0,ub=1,name="z_hat")
+#------------------------
+#(x esta en orden actividad, tiempo, tipo de drill)
+x = m.addVars(Act, T, Dr,vtype=GRB.BINARY,name="x")
+y = m.addVars(Act, T,vtype=GRB.BINARY,name="y")
+z = m.addVars(Act, T,vtype=GRB.BINARY,name="z")
+#------------------------
+x_bar = m.addVars(Act, T, Dr,vtype=GRB.BINARY,name="x_bar")
+y_bar = m.addVars(Act, T,vtype=GRB.BINARY,name="y_bar")
+z_bar = m.addVars(Act, T,vtype=GRB.BINARY,name="z_bar")
+#------------------------
+x_hat = m.addVars(I, Act, T, Dr,vtype=GRB.CONTINUOUS,lb=0,ub=1,name="x_hat")
+y_hat = m.addVars(J, Act, T,vtype=GRB.CONTINUOUS,lb=0,ub=1,name="y_hat")
+z_hat = m.addVars(K, Act, T,vtype=GRB.CONTINUOUS,lb=0,ub=1,name="z_hat")
 
 #=========== restricciones ============
 
@@ -370,16 +375,194 @@ for n in C:
 for n in C:
     for c in S[n]:
         for t in t:
-            x[c,t,2] <= x_bar[c,t,2]
+            m.addConstr(
+                x[c,t,2] <= x_bar[c,t,2]
+            )
 
 #estas creo que no son necesarias --------
 for n in C:
     for c in S[n]:
         for t in t:
-            y[c,t] <= y_bar[c,t]
+            m.addConstr(
+                y[c,t] <= y_bar[c,t]
+            )
 
 for n in C:
     for c in S[n]:
         for t in t:
-            z[c,t] <= z_bar[c,t]
+            m.addConstr(
+                z[c,t] <= z_bar[c,t]
+            )
+
+#======= Secuencias de procesos =======
+
+for n in C:
+    for c in G_1[n]:
+        for t in range(1,time_l):
+            m.addConstr(
+                gp.quicksum(y_hat[j,c,t] for j in J) <= J_val * x_bar[c,t - 1,0]
+            )
+
+for n in C:
+    for c in G_1[n]:
+        for t in range(1,time_l):
+            m.addConstr(
+                gp.quicksum(y_hat[j,c,t] for j in J) <= J_val * x_bar[c,t - 1,0]
+            )
+
+for n in C:
+    for c in G_1[n]:
+        for t in range(1,time_l):
+            m.addConstr(
+                gp.quicksum(z_hat[k,c,t] for k in K) <= J_val * y_bar[c,t - 1]
+            )
+
+for n in C:
+    for c in G_2[n]:
+        for t in range(1,time_l):
+            m.addConstr(
+                gp.quicksum(z_hat[k,c,t] for k in K) <= J_val * y_bar[c,t - 1]
+            )
+
+for n in C:
+    for c in S[n]:
+        for t in range(1,time_l):
+            m.addConstr(
+                gp.quicksum(y_hat[j,c,t] for j in J) <= J_val * x_bar[c,t-1,2]
+            )
+
+for n in C:
+    for c in S[n]:
+        for t in range(1,time_l):
+            m.addConstr(
+                gp.quicksum(z_hat[k,c,t] for k in K) <= J_val * y_bar[c,t - 1]
+            )
+
+#==== Precedencia estricta ======
+
+for n in C:
+    for c in G_1[n]:
+        for t in range(1,time_l):
+            for m in P_c:
+                if P_c[m] is None:
+                    continue
+                m.addConstr(
+                    gp.quicksum(x_hat[i,c,t,0] for i in I_h) <= I_h * z_bar[m, t -1]
+                )
+                m.addConstr(
+                    gp.quicksum(y_hat[j,c,t] for j in J) <= J * z_bar[m, t -1]
+                )
+                m.addConstr(
+                    gp.quicksum(z_hat[k,c,t] for k in K) <= K * z_bar[m, t -1]
+                )
+
+for n in C:
+    for c in G_2[n]:
+        for t in range(1,time_l):
+            for m in P_c:
+                if P_c[m] is None:
+                    continue
+                m.addConstr(
+                    gp.quicksum(x_hat[i,c,t,0] for i in I_h) <= I_h * z_bar[m, t -1]
+                )
+                m.addConstr(
+                    gp.quicksum(y_hat[j,c,t] for j in J) <= J * z_bar[m, t -1]
+                )
+                m.addConstr(
+                    gp.quicksum(z_hat[k,c,t] for k in K) <= K * z_bar[m, t -1]
+                )
+
+for n in C:
+    for c in S[n]:
+        for t in range(1,time_l):
+            for m in P_c:
+                if P_c[m] is None:
+                    continue
+                m.addConstr(
+                    gp.quicksum(x_hat[i,c,t,2] for i in I_h) <= I_h * z_bar[m, t -1]
+                )
+                m.addConstr(
+                    gp.quicksum(y_hat[j,c,t] for j in J) <= J * z_bar[m, t -1]
+                )
+                m.addConstr(
+                    gp.quicksum(z_hat[k,c,t] for k in K) <= K * z_bar[m, t -1]
+                )
+
+#----- Restricciones del objetivo -------
+
+for n in C:
+    for c in G_1[n]:
+        for t in range(1, time_l):
+            m.addConstr(
+                x_bar[c,t,0] >= x_bar[c,t-1,0]
+            )
+            m.addConstr(
+                y_bar[c,t] >= y_bar[c,t-1]
+            )
+            m.addConstr(
+                z_bar[c,t] >= y_bar[c,t-1]
+            )
+
+for n in C:
+    for c in G_2[n]:
+        for t in range(1, time_l):
+            m.addConstr(
+                x_bar[c,t,0] >= x_bar[c,t-1,0]
+            )
+            m.addConstr(
+                y_bar[c,t] >= y_bar[c,t-1]
+            )
+            m.addConstr(
+                z_bar[c,t] >= y_bar[c,t-1]
+            )
+
+for n in C:
+    for c in S[n]:
+        for t in range(1, time_l):
+            m.addConstr(
+                x_bar[c,t,0] >= x_bar[c,t-1,2]
+            )
+            m.addConstr(
+                y_bar[c,t] >= y_bar[c,t-1]
+            )
+            m.addConstr(
+                z_bar[c,t] >= y_bar[c,t-1]
+            )
+
+#======== Bateas ========
+#---- Tiempo ----
+
+for n in C:
+    for t in T:
+        for i in I_d:
+            m.addConstr(
+                gp.quicksum(x_hat[i,b,t,2]*T_t[t] for b in B[n]) <= T_t[t] * Lambda["i"]
+            )
+        
+        for j in J:
+            m.addConstr(
+                gp.quicksum(y_hat[j,b,t]*T_t[t] for b in B[n]) <= T_t[t] * Lambda["j"]
+            )
+
+        for k in K:
+            m.addConstr(
+                gp.quicksum(z_hat[k,b,t]*T_t[t] for b in B[n]) <= T_t[t] * Lambda["k"]
+            )
+
+#---- Precedencia ----
+
+for n in C:
+    for t in range(1,time_l):    
+        for m in G_2[n]:
+            for b in B[n]:
+                m.addConstr(
+                    gp.quicksum(x_bar[i,b,t,2] for i in I_d) <= I_d_v * z_bar[m, t-1]
+                )
+                m.addConstr(
+                    gp.quicksum(y_bar[j,b,t] for j in J) <= J_val * z_bar[m, t-1]
+                )
+                m.addConstr(
+                    gp.quicksum(z_bar[k,b,t] for k in K) <= K_val * z_bar[m, t-1]
+                )
+
 
