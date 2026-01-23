@@ -4,7 +4,6 @@ import random
 import gurobipy as gp
 from gurobipy import GRB
 
-
 m = gp.Model("obj_ejemplo")
 
 cas = 1   #caserones +1
@@ -34,7 +33,11 @@ G_2 = {c : range(sub_c*(c+2),sub_c*(c+3)) for c in C}
 #Bateas
 B = {c : range(sub_c*(c+2),sub_c*(c+3)) for c in C}
 #Bateas del subcaseron c
-SB_c = range(sub_c)
+SB_c = {n: list(B[n]) for n in C}
+SB_of_sub = {}
+for n in C:
+    for idx, c_sub in enumerate(S[n]):
+        SB_of_sub[c_sub] = SB_c[n][idx]
 #tipo de drill
 Dr = range(4)
 #Conjunto de maquinarias
@@ -75,6 +78,11 @@ Lambda = {
     "j": 1.0,
     "k": 1.0
 }
+#Masa bateas
+
+Mass_drill_B = {b: random.randint(1, 5) for n in C for b in B[n]}
+Mass_blast_B = {b: random.randint(1, 5) for n in C for b in B[n]}
+Mass_extr_B  = {b: random.randint(1, 5) for n in C for b in B[n]}
 
 #duracion del periodo
 T_t = {
@@ -97,6 +105,9 @@ z_bar = m.addVars(Act, T,vtype=GRB.BINARY,name="z_bar")
 x_hat = m.addVars(I, Act, T, Dr,vtype=GRB.CONTINUOUS,lb=0,ub=1,name="x_hat")
 y_hat = m.addVars(J, Act, T,vtype=GRB.CONTINUOUS,lb=0,ub=1,name="y_hat")
 z_hat = m.addVars(K, Act, T,vtype=GRB.CONTINUOUS,lb=0,ub=1,name="z_hat")
+#------------------------
+zC    = m.addVars(C, T, vtype=GRB.BINARY, name="zC")                    
+zbarC = m.addVars(C, T, vtype=GRB.CONTINUOUS, lb=0, ub=1, name="zbarC") 
 
 #=========== restricciones ============
 
@@ -553,16 +564,133 @@ for n in C:
 
 for n in C:
     for t in range(1,time_l):    
-        for m in G_2[n]:
+        for m_g in G_2[n]:
             for b in B[n]:
                 m.addConstr(
-                    gp.quicksum(x_bar[i,b,t,2] for i in I_d) <= I_d_v * z_bar[m, t-1]
+                    gp.quicksum(x_hat[i,b,t,2] for i in I_d) <= I_d_v * z_bar[m_g, t-1]
                 )
                 m.addConstr(
-                    gp.quicksum(y_bar[j,b,t] for j in J) <= J_val * z_bar[m, t-1]
+                    gp.quicksum(y_hat[j,b,t] for j in J) <= J_val * z_bar[m_g, t-1]
                 )
                 m.addConstr(
-                    gp.quicksum(z_bar[k,b,t] for k in K) <= K_val * z_bar[m, t-1]
+                    gp.quicksum(z_hat[k,b,t] for k in K) <= K_val * z_bar[m_g, t-1]
                 )
 
+#---- Progreso ----
+#agregue un parametro para la amsa de las bateas
 
+for n in C:
+    for b in B[n]:
+        for t in T:
+            m.addConstr(
+                x_bar[b, t, 2] * Mass_drill_B[b]
+                <= gp.quicksum(x_hat[i, b, tau, 2] * T_t[tau] for i in I_d for tau in range(0, t+1))
+            )
+            m.addConstr(
+                y_bar[b, t] * Mass_blast_B[b]
+                <= gp.quicksum(y_hat[j, b, tau] * T_t[tau] for j in J for tau in range(0, t+1))
+            )
+            m.addConstr(
+                z_bar[b, t] * Mass_extr_B[b]
+                <= gp.quicksum(z_hat[k, b, tau] * T_t[tau] for k in K for tau in range(0, t+1))
+            )
+
+#---- Vinculo y finalizacón ----
+
+for n in C:
+    for b in B[n]:
+        m.addConstr(gp.quicksum(x[b, t, 2] for t in T) == 1)
+        m.addConstr(gp.quicksum(y[b, t]    for t in T) == 1)
+        m.addConstr(gp.quicksum(z[b, t]    for t in T) == 1)
+
+        for t in T:
+            m.addConstr(x[b, t, 2] <= x_bar[b, t, 2])
+            m.addConstr(y[b, t]    <= y_bar[b, t])
+            m.addConstr(z[b, t]    <= z_bar[b, t])
+
+#---- Secuencia de procesos ----
+
+for n in C:
+    for b in B[n]:
+        for t in range(1, time_l):
+            m.addConstr(
+                gp.quicksum(y_hat[j, b, t] for j in J) <= J_val * x_bar[b, t-1, 2]
+            )
+            m.addConstr(
+                gp.quicksum(z_hat[k, b, t] for k in K) <= K_val * y_bar[b, t-1]
+            )
+
+#---- Restricciones de objetivo ----
+
+for n in C:
+    for b in B[n]:
+        for t in range(1, time_l):
+            m.addConstr(x_bar[b, t, 2] >= x_bar[b, t-1, 2])  
+            m.addConstr(y_bar[b, t]    >= y_bar[b, t-1])     
+            m.addConstr(z_bar[b, t]    >= z_bar[b, t-1])     
+
+#======== Union caseron-subcaseron-batea-galeria ========
+#65
+for n in C:
+    for c_sub in S[n]:
+        for t in range(1, time_l):  
+            for m_g in list(G_1[n]) + list(G_2[n]): 
+                m.addConstr(
+                    gp.quicksum(y_hat[j, c_sub, t] for j in J)
+                    <= len(J) * z_bar[m_g, t-1]
+                )
+
+#66
+for n in C:
+    for c_sub in S[n]:
+        b_sub = SB_of_sub[c_sub]     
+        for t in range(1, time_l): 
+            m.addConstr(
+                gp.quicksum(y_hat[j, c_sub, t] for j in J)
+                <= len(J) * z_bar[b_sub, t-1]
+            )
+
+#67
+for n in C:
+    for c_sub in S[n]:
+        for t in range(1, time_l):  
+            for m_g in list(G_1[n]) + list(G_2[n]):
+                m.addConstr(
+                    gp.quicksum(z_hat[k, c_sub, t] for k in K)
+                    <= len(K) * z_bar[m_g, t-1]
+                )
+
+#68
+for n in C:
+    for c_sub in S[n]:
+        b_sub = SB_of_sub[c_sub]   
+        for t in range(1, time_l):
+            m.addConstr(
+                gp.quicksum(z_hat[k, c_sub, t] for k in K)
+                <= len(K) * z_bar[b_sub, t-1]
+            )
+
+#69
+for c in C:
+    Sc = list(S[c]) 
+    for t in T:
+        m.addConstr(
+            zbarC[c, t]
+            <= (1.0 / len(Sc)) * gp.quicksum(
+                gp.quicksum(z[nu, tau] for tau in range(0, t+1))
+                for nu in Sc
+            )
+        )
+
+#70
+for c in C:
+    for t in T:
+        m.addConstr(
+            zC[c, t] <= zbarC[c, t]
+        )
+
+#71
+for c in C:
+    m.addConstr(
+        gp.quicksum(zC[c, t] for t in T) == 1
+    )
