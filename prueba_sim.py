@@ -32,7 +32,7 @@ P_c = {
 G_1 = {c : range(sub_c*(c+1),sub_c*(c+2)) for c in C}
 G_2 = {c : range(sub_c*(c+2),sub_c*(c+3)) for c in C}
 #Bateas
-B = {c : range(sub_c*(c+2),sub_c*(c+3)) for c in C}
+B = {c : range(sub_c*(c+3),sub_c*(c+4)) for c in C} #<-------Fijense que esto este cambiado
 #Bateas del subcaseron c
 SB_c = {n: list(B[n]) for n in C}
 SB_of_sub = {}
